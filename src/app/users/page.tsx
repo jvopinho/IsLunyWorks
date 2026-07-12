@@ -14,6 +14,7 @@ import { Table, Column } from '@/components/Table';
 import { Modal } from '@/components/Modal';
 import { Input } from '@/components/Input';
 import { createUserSchema, updateUserSchema, CreateUserInput, UpdateUserInput } from '@/validations/user';
+import { Plus, Pencil, BriefcaseBusiness, UserCheck, UserX, Search, FileSpreadsheet, CircleX, Save, Trash2, Coffee, Clock3 } from 'lucide-react';
 import { ActionsBar, SearchWrapper, FormContainer, FormGroup, Badge, RowActions, ToggleWrapper } from './styles';
 
 export default function UsersPage() {
@@ -24,6 +25,31 @@ export default function UsersPage() {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isExporting, setIsExporting] = useState(false);
+
+  const [isWorkloadOpen, setIsWorkloadOpen] = useState(false);
+  const [workloadUser, setWorkloadUser] = useState<any>(null);
+  const [weeklyHours, setWeeklyHours] = useState(40);
+  const [expectedDailyHours, setExpectedDailyHours] = useState(8);
+  const [mondayEnabled, setMondayEnabled] = useState(true);
+  const [tuesdayEnabled, setTuesdayEnabled] = useState(true);
+  const [wednesdayEnabled, setWednesdayEnabled] = useState(true);
+  const [thursdayEnabled, setThursdayEnabled] = useState(true);
+  const [fridayEnabled, setFridayEnabled] = useState(true);
+  const [saturdayEnabled, setSaturdayEnabled] = useState(false);
+  const [sundayEnabled, setSundayEnabled] = useState(false);
+  const [extraHoursMode, setExtraHoursMode] = useState('BANK_HOURS');
+  const [scheduleId, setScheduleId] = useState('');
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [flexibleSchedule, setFlexibleSchedule] = useState(false);
+  const [schedStartTime, setSchedStartTime] = useState('08:00');
+  const [schedEndTime, setSchedEndTime] = useState('17:00');
+  const [schedDays, setSchedDays] = useState<any[]>([]);
+  const [schedBreaks, setSchedBreaks] = useState<any[]>([]);
+  const [newBreakDay, setNewBreakDay] = useState(1);
+  const [newBreakName, setNewBreakName] = useState('');
+  const [newBreakStart, setNewBreakStart] = useState('12:00');
+  const [newBreakEnd, setNewBreakEnd] = useState('13:00');
+  const [newBreakPaid, setNewBreakPaid] = useState(false);
 
   const { data: users = [], isLoading: isUsersLoading } = useQuery<any[]>({
     queryKey: ['users', search],
@@ -145,6 +171,124 @@ export default function UsersPage() {
     reset();
   };
 
+  const handleOpenWorkload = async (user: any) => {
+    setWorkloadUser(user);
+    try {
+      const res = await axios.get(`/api/work-schedules?userId=${user.id}`);
+      const schedule = res.data[0];
+      if (schedule) {
+        setScheduleId(schedule.id);
+        setWeeklyHours(schedule.weeklyHours);
+        setExpectedDailyHours(schedule.expectedDailyHours);
+        setMondayEnabled(schedule.mondayEnabled);
+        setTuesdayEnabled(schedule.tuesdayEnabled);
+        setWednesdayEnabled(schedule.wednesdayEnabled);
+        setThursdayEnabled(schedule.thursdayEnabled);
+        setFridayEnabled(schedule.fridayEnabled);
+        setSaturdayEnabled(schedule.saturdayEnabled);
+        setSundayEnabled(schedule.sundayEnabled);
+        setExtraHoursMode(schedule.extraHoursMode);
+        setFlexibleSchedule(schedule.flexibleSchedule || false);
+        setSchedStartTime(schedule.startTime || '08:00');
+        setSchedEndTime(schedule.endTime || '17:00');
+        setSchedDays(schedule.days || []);
+        setSchedBreaks(schedule.breaks || []);
+      } else {
+        setScheduleId('');
+        setWeeklyHours(40);
+        setExpectedDailyHours(8);
+        setMondayEnabled(true);
+        setTuesdayEnabled(true);
+        setWednesdayEnabled(true);
+        setThursdayEnabled(true);
+        setFridayEnabled(true);
+        setSaturdayEnabled(false);
+        setSundayEnabled(false);
+        setExtraHoursMode('BANK_HOURS');
+        setFlexibleSchedule(false);
+        setSchedStartTime('08:00');
+        setSchedEndTime('17:00');
+        setSchedDays([]);
+        setSchedBreaks([]);
+      }
+      setIsWorkloadOpen(true);
+    } catch {
+      alert('Erro ao carregar jornada de trabalho.');
+    }
+  };
+
+  const handleSaveWorkload = async () => {
+    if (!scheduleId) {
+      alert('Nenhuma configuração de jornada encontrada para este usuário.');
+      return;
+    }
+    setIsSavingSchedule(true);
+    try {
+      await axios.patch(`/api/work-schedules/${scheduleId}`, {
+        weeklyHours,
+        expectedDailyHours,
+        mondayEnabled,
+        tuesdayEnabled,
+        wednesdayEnabled,
+        thursdayEnabled,
+        fridayEnabled,
+        saturdayEnabled,
+        sundayEnabled,
+        extraHoursMode,
+        flexibleSchedule,
+        startTime: schedStartTime,
+        endTime: schedEndTime,
+        days: schedDays.map((d: any) => ({
+          dayOfWeek: d.dayOfWeek,
+          enabled: d.enabled,
+          startTime: d.startTime,
+          endTime: d.endTime,
+          expectedDailyMinutes: d.expectedDailyMinutes,
+        })),
+      });
+      setIsWorkloadOpen(false);
+      setWorkloadUser(null);
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Erro ao salvar jornada de trabalho.');
+    } finally {
+      setIsSavingSchedule(false);
+    }
+  };
+
+  const handleAddBreak = async () => {
+    if (!newBreakName || !newBreakStart || !newBreakEnd) {
+      alert('Preencha todos os campos do intervalo.');
+      return;
+    }
+    try {
+      const res = await axios.post(`/api/work-schedules/${scheduleId}/breaks`, {
+        dayOfWeek: newBreakDay,
+        name: newBreakName,
+        startTime: newBreakStart,
+        endTime: newBreakEnd,
+        paid: newBreakPaid,
+      });
+      setSchedBreaks([...schedBreaks, res.data]);
+      setNewBreakName('');
+      setNewBreakStart('12:00');
+      setNewBreakEnd('13:00');
+      setNewBreakPaid(false);
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Erro ao criar intervalo.');
+    }
+  };
+
+  const handleDeleteBreak = async (breakId: string) => {
+    if (!confirm('Deseja remover este intervalo?')) return;
+    try {
+      await axios.delete(`/api/work-schedules/breaks/${breakId}`);
+      setSchedBreaks(schedBreaks.filter((b: any) => b.id !== breakId));
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Erro ao remover intervalo.');
+    }
+  };
+
   const onSubmit = (data: any) => {
     if (selectedUser) {
       updateMutation.mutate({ id: selectedUser.id, data });
@@ -188,7 +332,12 @@ export default function UsersPage() {
         <RowActions>
           {can('users.update') && (
             <Button variant="secondary" size="sm" onClick={() => handleOpenEdit(row)}>
-              Editar
+              Editar <Pencil size={12} style={{ marginLeft: '4px' }} />
+            </Button>
+          )}
+          {can('workload.manage') && (
+            <Button variant="secondary" size="sm" onClick={() => handleOpenWorkload(row)}>
+              Jornada <BriefcaseBusiness size={12} style={{ marginLeft: '4px' }} />
             </Button>
           )}
           {can('users.delete') && (
@@ -197,7 +346,11 @@ export default function UsersPage() {
               size="sm"
               onClick={() => handleToggleActive(row)}
             >
-              {row.active ? 'Desativar' : 'Ativar'}
+              {row.active ? (
+                <>Desativar <UserX size={12} style={{ marginLeft: '4px' }} /></>
+              ) : (
+                <>Ativar <UserCheck size={12} style={{ marginLeft: '4px' }} /></>
+              )}
             </Button>
           )}
         </RowActions>
@@ -218,17 +371,19 @@ export default function UsersPage() {
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             />
-            <Button onClick={handleSearch}>Buscar</Button>
+            <Button onClick={handleSearch}>
+              Buscar <Search size={16} style={{ marginLeft: '6px' }} />
+            </Button>
           </SearchWrapper>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             {can('users.export') && (
               <Button variant="secondary" onClick={handleExportExcel} isLoading={isExporting}>
-                Exportar Excel
+                Exportar Excel <FileSpreadsheet size={16} style={{ marginLeft: '6px' }} />
               </Button>
             )}
             {can('users.create') && (
               <Button variant="primary" onClick={handleOpenCreate}>
-                Novo Colaborador
+                Novo Colaborador <Plus size={16} style={{ marginLeft: '6px' }} />
               </Button>
             )}
           </div>
@@ -248,14 +403,14 @@ export default function UsersPage() {
         footer={
           <>
             <Button variant="secondary" onClick={handleClose}>
-              Cancelar
+              Cancelar <CircleX size={16} style={{ marginLeft: '6px' }} />
             </Button>
             <Button
               variant="primary"
               onClick={handleSubmit(onSubmit)}
               isLoading={createMutation.isPending || updateMutation.isPending}
             >
-              {selectedUser ? 'Salvar Alterações' : 'Criar Colaborador'}
+              {selectedUser ? 'Salvar Alterações' : 'Criar Colaborador'} <Save size={16} style={{ marginLeft: '6px' }} />
             </Button>
           </>
         }
@@ -299,6 +454,235 @@ export default function UsersPage() {
             </ToggleWrapper>
           )}
         </FormContainer>
+      </Modal>
+
+      <Modal
+        isOpen={isWorkloadOpen}
+        onClose={() => { setIsWorkloadOpen(false); setWorkloadUser(null); }}
+        title={`Configurar Jornada - ${workloadUser?.name}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setIsWorkloadOpen(false); setWorkloadUser(null); }}>
+              Cancelar <CircleX size={16} style={{ marginLeft: '6px' }} />
+            </Button>
+            <Button variant="primary" onClick={handleSaveWorkload} isLoading={isSavingSchedule}>
+              Salvar Jornada <Save size={16} style={{ marginLeft: '6px' }} />
+            </Button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxHeight: '70vh', overflowY: 'auto', paddingRight: '0.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <FormGroup>
+              <label htmlFor="weeklyHours">Horas Semanais</label>
+              <input
+                type="number"
+                id="weeklyHours"
+                value={weeklyHours}
+                onChange={(e) => setWeeklyHours(parseFloat(e.target.value))}
+                style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
+              />
+            </FormGroup>
+            
+            <FormGroup>
+              <label htmlFor="expectedDailyHours">Horas Previstas/Dia</label>
+              <input
+                type="number"
+                id="expectedDailyHours"
+                value={expectedDailyHours}
+                onChange={(e) => setExpectedDailyHours(parseFloat(e.target.value))}
+                style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
+              />
+            </FormGroup>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <FormGroup>
+              <label htmlFor="schedStartTime" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <Clock3 size={14} /> Entrada Padrão
+              </label>
+              <input
+                type="time"
+                id="schedStartTime"
+                value={schedStartTime}
+                onChange={(e) => setSchedStartTime(e.target.value)}
+                style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
+              />
+            </FormGroup>
+            <FormGroup>
+              <label htmlFor="schedEndTime" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <Clock3 size={14} /> Saída Padrão
+              </label>
+              <input
+                type="time"
+                id="schedEndTime"
+                value={schedEndTime}
+                onChange={(e) => setSchedEndTime(e.target.value)}
+                style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
+              />
+            </FormGroup>
+          </div>
+
+          <FormGroup>
+            <label htmlFor="extraHoursMode">Tratamento de Horas Excedentes</label>
+            <select
+              id="extraHoursMode"
+              value={extraHoursMode}
+              onChange={(e) => setExtraHoursMode(e.target.value)}
+              style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px', backgroundColor: 'white' }}
+            >
+              <option value="BANK_HOURS">Banco de Horas (BANK_HOURS)</option>
+              <option value="OVERTIME">Horas Extras (OVERTIME)</option>
+            </select>
+          </FormGroup>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer', padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: flexibleSchedule ? 'rgba(16, 185, 129, 0.08)' : 'transparent' }}>
+            <input type="checkbox" checked={flexibleSchedule} onChange={(e) => setFlexibleSchedule(e.target.checked)} />
+            <div>
+              <strong>Horário Flexível</strong>
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Quando ativo, atrasos não são contabilizados automaticamente</div>
+            </div>
+          </label>
+
+          <div>
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '0.5rem' }}>
+              Dias de Expediente Ativos
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={mondayEnabled} onChange={(e) => setMondayEnabled(e.target.checked)} /> Segunda-feira
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={tuesdayEnabled} onChange={(e) => setTuesdayEnabled(e.target.checked)} /> Terça-feira
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={wednesdayEnabled} onChange={(e) => setWednesdayEnabled(e.target.checked)} /> Quarta-feira
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={thursdayEnabled} onChange={(e) => setThursdayEnabled(e.target.checked)} /> Quinta-feira
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={fridayEnabled} onChange={(e) => setFridayEnabled(e.target.checked)} /> Sexta-feira
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={saturdayEnabled} onChange={(e) => setSaturdayEnabled(e.target.checked)} /> Sábado
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={sundayEnabled} onChange={(e) => setSundayEnabled(e.target.checked)} /> Domingo
+              </label>
+            </div>
+          </div>
+
+          {/* Per-day schedule configuration */}
+          {schedDays.length > 0 && (
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.5rem' }}>
+                <Clock3 size={14} /> Horários por Dia da Semana
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {schedDays.sort((a: any, b: any) => a.dayOfWeek - b.dayOfWeek).map((day: any, idx: number) => {
+                  const DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+                  return (
+                    <div key={day.id || idx} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr 80px', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: day.enabled ? 'transparent' : '#f8fafc' }}>
+                      <span style={{ fontWeight: 600, color: day.enabled ? '#0f172a' : '#94a3b8' }}>{DAYS[day.dayOfWeek]}</span>
+                      <input
+                        type="time"
+                        value={day.startTime || ''}
+                        disabled={!day.enabled}
+                        onChange={(e) => {
+                          const updated = [...schedDays];
+                          updated[idx] = { ...updated[idx], startTime: e.target.value };
+                          setSchedDays(updated);
+                        }}
+                        style={{ padding: '0.25rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem' }}
+                      />
+                      <input
+                        type="time"
+                        value={day.endTime || ''}
+                        disabled={!day.enabled}
+                        onChange={(e) => {
+                          const updated = [...schedDays];
+                          updated[idx] = { ...updated[idx], endTime: e.target.value };
+                          setSchedDays(updated);
+                        }}
+                        style={{ padding: '0.25rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem' }}
+                      />
+                      <span style={{ color: '#64748b', textAlign: 'center' }}>{day.enabled ? `${(day.expectedDailyMinutes / 60).toFixed(0)}h` : 'Folga'}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Breaks Management */}
+          <div>
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.5rem' }}>
+              <Coffee size={14} /> Intervalos / Pausas
+            </label>
+
+            {schedBreaks.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '1rem' }}>
+                {schedBreaks.map((brk: any) => {
+                  const DAYS_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                  return (
+                    <div key={brk.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8rem' }}>
+                      <div>
+                        <strong>{brk.name}</strong>
+                        <span style={{ color: '#64748b', marginLeft: '0.5rem' }}>
+                          {DAYS_SHORT[brk.dayOfWeek]} {brk.startTime} → {brk.endTime}
+                        </span>
+                        {brk.paid && <span style={{ marginLeft: '0.5rem', color: '#10b981', fontWeight: 600 }}>Remunerado</span>}
+                      </div>
+                      <button
+                        onClick={() => handleDeleteBreak(brk.id)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem', padding: '0.5rem', border: '1px dashed #e2e8f0', borderRadius: '6px', textAlign: 'center' }}>
+                Nenhum intervalo cadastrado.
+              </div>
+            )}
+
+            {scheduleId && (
+              <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 80px 80px 1fr', gap: '0.5rem', alignItems: 'end' }}>
+                <FormGroup>
+                  <label style={{ fontSize: '0.7rem' }}>Dia</label>
+                  <select value={newBreakDay} onChange={(e) => setNewBreakDay(parseInt(e.target.value))} style={{ padding: '0.25rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem' }}>
+                    <option value={0}>Dom</option>
+                    <option value={1}>Seg</option>
+                    <option value={2}>Ter</option>
+                    <option value={3}>Qua</option>
+                    <option value={4}>Qui</option>
+                    <option value={5}>Sex</option>
+                    <option value={6}>Sáb</option>
+                  </select>
+                </FormGroup>
+                <FormGroup>
+                  <label style={{ fontSize: '0.7rem' }}>Nome</label>
+                  <input type="text" placeholder="Ex: Almoço" value={newBreakName} onChange={(e) => setNewBreakName(e.target.value)} style={{ padding: '0.25rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem' }} />
+                </FormGroup>
+                <FormGroup>
+                  <label style={{ fontSize: '0.7rem' }}>Início</label>
+                  <input type="time" value={newBreakStart} onChange={(e) => setNewBreakStart(e.target.value)} style={{ padding: '0.25rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem' }} />
+                </FormGroup>
+                <FormGroup>
+                  <label style={{ fontSize: '0.7rem' }}>Fim</label>
+                  <input type="time" value={newBreakEnd} onChange={(e) => setNewBreakEnd(e.target.value)} style={{ padding: '0.25rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem' }} />
+                </FormGroup>
+                <Button size="sm" variant="primary" onClick={handleAddBreak}>
+                  <Plus size={14} /> Adicionar
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
       </Modal>
     </DashboardLayout>
   );

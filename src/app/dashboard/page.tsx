@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { usePermission } from '@/hooks/usePermission';
+import { Clock3 } from 'lucide-react';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { Card } from '@/components/Card';
@@ -20,6 +21,9 @@ import { RolesChart } from './components/RolesChart';
 import { UsersGrowthChart } from './components/UsersGrowthChart';
 import { TopUsersHoursChart } from './components/TopUsersHoursChart';
 import { ActivityTimeline } from './components/ActivityTimeline';
+import { AverageTimesChart } from './components/AverageTimesChart';
+import { AuditChangesChart } from './components/AuditChangesChart';
+import { RecentUsersWidget } from './components/RecentUsersWidget';
 
 interface ClockStatusResponse {
   isClockedIn: boolean;
@@ -54,10 +58,19 @@ export default function DashboardPage() {
     enabled: !!user?.id,
   });
 
+  const { data: bankHoursBalance } = useQuery<any>({
+    queryKey: ['myBankHoursBalance'],
+    queryFn: async () => {
+      const res = await axios.get('/api/bank-hours');
+      return res.data;
+    },
+    enabled: !!user?.id && can('bank_hours.view'),
+  });
+
   const { data: adminStats, isLoading: isStatsLoading } = useQuery<any>({
     queryKey: ['adminStats'],
     queryFn: async () => {
-      const res = await axios.get('/api/dashboard/stats');
+      const res = await axios.get('/api/dashboard');
       return res.data;
     },
     enabled: can('admin'),
@@ -144,13 +157,16 @@ export default function DashboardPage() {
 
           <AdminDashboardGrid>
             <ChartsCol>
-              <HoursChart data={chartsData?.hoursAndRecords} isLoading={isChartsLoading} />
+              <HoursChart />
               <ClockChart data={chartsData?.hoursAndRecords} isLoading={isChartsLoading} />
+              <AverageTimesChart data={chartsData?.avgTimesData} isLoading={isChartsLoading} />
               <UsersGrowthChart data={chartsData?.usersGrowth} isLoading={isChartsLoading} />
             </ChartsCol>
             
             <ChartsCol>
               <RolesChart data={chartsData?.rolesDistribution} isLoading={isChartsLoading} />
+              <AuditChangesChart />
+              <RecentUsersWidget users={chartsData?.recentUsers} isLoading={isChartsLoading} />
               <TopUsersHoursChart />
               <ActivityTimeline data={activityData} isLoading={isActivityLoading} />
             </ChartsCol>
@@ -159,7 +175,7 @@ export default function DashboardPage() {
       ) : (
         <>
           {reportData?.stats && (
-            <Grid>
+            <Grid style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
               <StatCard>
                 <span className="title">Total de Registros</span>
                 <span className="value">{reportData.stats.totalRecords}</span>
@@ -180,6 +196,20 @@ export default function DashboardPage() {
                 <span className="value">{reportData.stats.daysCount}</span>
                 <span className="sub">Total de dias no controle</span>
               </StatCard>
+              {can('bank_hours.view') && bankHoursBalance && (
+                <StatCard style={{ cursor: 'pointer' }} onClick={() => window.location.href = '/bank-hours'}>
+                  <span className="title">Banco de Horas</span>
+                  <span className="value" style={{ color: bankHoursBalance.currentBalanceMinutes >= 0 ? '#10b981' : '#ef4444' }}>
+                    {(() => {
+                      const mins = bankHoursBalance.currentBalanceMinutes;
+                      const hrs = Math.floor(Math.abs(mins) / 60);
+                      const mm = Math.abs(mins) % 60;
+                      return `${mins < 0 ? '-' : ''}${hrs}h${String(mm).padStart(2, '0')}m`;
+                    })()}
+                  </span>
+                  <span className="sub">Clique para ver extrato</span>
+                </StatCard>
+              )}
             </Grid>
           )}
 
@@ -194,7 +224,9 @@ export default function DashboardPage() {
 
             {can('clock.register') && (
               <ClockCardWrapper>
-                <SectionTitle>⏰ Ponto Eletrônico</SectionTitle>
+                <SectionTitle style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Clock3 size={18} /> Ponto Eletrônico
+                </SectionTitle>
 
                 {isClockLoading ? (
                   <div>Carregando status...</div>

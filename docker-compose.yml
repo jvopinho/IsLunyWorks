@@ -23,7 +23,7 @@ services:
       dockerfile: Dockerfile
     container_name: clock-app
     ports:
-      - "3000:3000"
+      - "9340:3000"
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres123}@postgres:5432/${POSTGRES_DB:-clock_system}?schema=public"
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}

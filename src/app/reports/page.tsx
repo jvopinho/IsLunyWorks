@@ -12,7 +12,9 @@ import { Card } from '@/components/Card';
 import { Table, Column } from '@/components/Table';
 import { Button } from '@/components/Button';
 import { formatDateTime, formatDate, formatMinutes } from '@/utils/date';
-import { FilterCard, FilterGrid, StatsGrid, StatBox, FormGroup } from './styles';
+import { FilterCard, FilterGrid, FormGroup } from './styles';
+import { ReportsDashboard } from './components/ReportsDashboard';
+import { Filter, RefreshCw, FileSpreadsheet, BarChart3, Pencil, Check, CircleX, Save, History } from 'lucide-react';
 
 export default function ReportsPage() {
   const { can, user } = usePermission();
@@ -37,6 +39,51 @@ export default function ReportsPage() {
   const [editNotes, setEditNotes] = useState('');
   const [editReason, setEditReason] = useState('');
 
+  const [isCompensateOpen, setIsCompensateOpen] = useState(false);
+  const [compensateRecord, setCompensateRecord] = useState<any>(null);
+  const [compensateHours, setCompensateHours] = useState('');
+  const [compensateReason, setCompensateReason] = useState('');
+  const [isCompensating, setIsCompensating] = useState(false);
+
+  const handleOpenCompensate = (record: any) => {
+    setCompensateRecord(record);
+    setCompensateHours((record.deficit / 60).toFixed(1));
+    setCompensateReason('Compensação de jornada pendente pelo saldo do banco de horas');
+    setIsCompensateOpen(true);
+  };
+
+  const handleCloseCompensate = () => {
+    setIsCompensateOpen(false);
+    setCompensateRecord(null);
+  };
+
+  const handleSaveCompensate = async () => {
+    if (!compensateHours || isNaN(Number(compensateHours)) || Number(compensateHours) <= 0) {
+      alert('Por favor, informe uma quantidade de horas válida.');
+      return;
+    }
+    if (!compensateReason || compensateReason.trim().length < 5) {
+      alert('Por favor, informe uma justificativa detalhada (mínimo 5 caracteres).');
+      return;
+    }
+
+    setIsCompensating(true);
+    try {
+      const minutes = Math.round(parseFloat(compensateHours) * 60);
+      await axios.post('/api/bank-hours/use', {
+        clockRecordId: compensateRecord.id,
+        minutes,
+        reason: compensateReason,
+      });
+      handleCloseCompensate();
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Erro ao realizar compensação.');
+    } finally {
+      setIsCompensating(false);
+    }
+  };
+
   const { data: users = [] } = useQuery<any[]>({
     queryKey: ['usersList'],
     queryFn: async () => {
@@ -50,7 +97,7 @@ export default function ReportsPage() {
     queryKey: ['reports', queryParams],
     queryFn: async () => {
       const { userId, startDate, endDate } = queryParams;
-      let url = '/api/reports?';
+      let url = '/api/reports/work-hours?';
       
       const targetUserId = can('users.view') ? userId : user?.id;
       if (targetUserId) url += `userId=${targetUserId}&`;
@@ -215,7 +262,7 @@ export default function ReportsPage() {
     {
       key: 'user',
       header: 'Colaborador',
-      render: (row) => row.user?.name || '-',
+      render: (row) => row.userName || '-',
     },
     {
       key: 'date',
@@ -223,19 +270,101 @@ export default function ReportsPage() {
       render: (row) => formatDate(row.clockIn),
     },
     {
+      key: 'plannedIn',
+      header: 'Entrada Prevista',
+      render: (row) => row.plannedIn ? new Date(row.plannedIn).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-',
+    },
+    {
       key: 'clockIn',
-      header: 'Entrada',
+      header: 'Entrada Realizada',
       render: (row) => formatDateTime(row.clockIn),
     },
     {
+      key: 'delay',
+      header: 'Atraso Entrada',
+      render: (row) => row.delayInMinutes > 0 ? (
+        <span style={{ color: '#ef4444', fontWeight: 600 }}>+{row.delayInMinutes} min</span>
+      ) : (
+        <span style={{ color: '#10b981' }}>No horário</span>
+      ),
+    },
+    {
+      key: 'plannedOut',
+      header: 'Saída Prevista',
+      render: (row) => row.plannedOut ? new Date(row.plannedOut).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-',
+    },
+    {
       key: 'clockOut',
-      header: 'Saída',
+      header: 'Saída Realizada',
       render: (row) => row.clockOut ? formatDateTime(row.clockOut) : <span style={{ color: '#eab308', fontWeight: '500' }}>Em aberto</span>,
     },
     {
-      key: 'totalMinutes',
+      key: 'outDiff',
+      header: 'Desvio Saída',
+      render: (row) => {
+        if (row.earlyOutMinutes > 0) {
+          return <span style={{ color: '#ef4444', fontWeight: 600 }}>-{row.earlyOutMinutes} min</span>;
+        }
+        if (row.extraOutMinutes > 0) {
+          return <span style={{ color: '#10b981', fontWeight: 600 }}>+{row.extraOutMinutes} min</span>;
+        }
+        return <span style={{ color: '#10b981' }}>No horário</span>;
+      },
+    },
+    {
+      key: 'expected',
+      header: 'Tempo Previsto',
+      render: (row) => formatMinutes(row.expected),
+    },
+    {
+      key: 'worked',
       header: 'Tempo Trabalhado',
-      render: (row) => formatMinutes(row.totalMinutes),
+      render: (row) => formatMinutes(row.worked),
+    },
+    {
+      key: 'breaks',
+      header: 'Tempo em Pausa',
+      render: (row) => formatMinutes(row.actualBreakMinutes),
+    },
+    {
+      key: 'normal',
+      header: 'Normais',
+      render: (row) => formatMinutes(row.normal),
+    },
+    {
+      key: 'extra',
+      header: 'Extras',
+      render: (row) => formatMinutes(row.extra),
+    },
+    {
+      key: 'bank',
+      header: 'Banco (+)',
+      render: (row) => formatMinutes(row.bank),
+    },
+    {
+      key: 'used',
+      header: 'Banco Usado (-)',
+      render: (row) => formatMinutes(row.used),
+    },
+    {
+      key: 'deficit',
+      header: 'Déficit',
+      render: (row) => formatMinutes(row.deficit),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => {
+        let color = '#ef4444';
+        if (row.status.includes('cumprida') && !row.status.includes('parcialmente') && !row.status.includes('não')) {
+          color = '#10b981';
+        } else if (row.status.includes('parcialmente')) {
+          color = '#f59e0b';
+        } else if (row.status.includes('Sem expediente')) {
+          color = '#64748b';
+        }
+        return <span style={{ color, fontWeight: 600, fontSize: '0.8rem' }}>{row.status}</span>;
+      },
     },
     {
       key: 'notes',
@@ -248,7 +377,12 @@ export default function ReportsPage() {
         <div style={{ display: 'flex', gap: '0.25rem' }}>
           {can('clock.edit') && (
             <Button size="sm" variant="secondary" onClick={() => handleOpenEdit(row)}>
-              Editar
+              Editar <Pencil size={12} style={{ marginLeft: '4px' }} />
+            </Button>
+          )}
+          {can('bank_hours.manage') && row.deficit > 0 && (
+            <Button size="sm" variant="success" onClick={() => handleOpenCompensate(row)}>
+              Compensar <Check size={12} style={{ marginLeft: '4px' }} />
             </Button>
           )}
         </div>
@@ -302,41 +436,33 @@ export default function ReportsPage() {
 
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <Button variant="primary" onClick={handleApplyFilters}>
-              Filtrar
+              Filtrar <Filter size={16} style={{ marginLeft: '6px' }} />
             </Button>
             <Button variant="secondary" onClick={handleClearFilters}>
-              Limpar
+              Limpar <RefreshCw size={16} style={{ marginLeft: '6px' }} />
             </Button>
             {can('reports.export') && (
               <Button variant="success" onClick={handleExportExcel} isLoading={isExporting}>
-                Exportar Excel
+                Exportar Excel <FileSpreadsheet size={16} style={{ marginLeft: '6px' }} />
               </Button>
             )}
           </div>
         </FilterGrid>
       </FilterCard>
 
-      <StatsGrid>
-        <StatBox>
-          <span className="label">Total de Horas</span>
-          <span className="value">{parseFloat(stats.totalHours).toFixed(1)}h</span>
-        </StatBox>
-        <StatBox>
-          <span className="label">Média Diária</span>
-          <span className="value">{parseFloat(stats.dailyAverageHours).toFixed(1)}h</span>
-        </StatBox>
-        <StatBox>
-          <span className="label">Dias Trabalhados</span>
-          <span className="value">{stats.daysCount}</span>
-        </StatBox>
-        <StatBox>
-          <span className="label">Total de Registros</span>
-          <span className="value">{stats.totalRecords}</span>
-        </StatBox>
-      </StatsGrid>
+      <ReportsDashboard
+        userId={queryParams.userId}
+        startDate={queryParams.startDate}
+        endDate={queryParams.endDate}
+      />
 
       <Card
-        title="Espelho de Ponto Consolidado"
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <BarChart3 size={18} />
+            <span>Espelho de Ponto Consolidado</span>
+          </div>
+        }
         description="Registros de ponto detalhados de acordo com os filtros aplicados"
       >
         {isLoading ? (
@@ -357,10 +483,10 @@ export default function ReportsPage() {
         footer={
           <>
             <Button variant="secondary" onClick={handleCloseEdit}>
-              Cancelar
+              Cancelar <CircleX size={16} style={{ marginLeft: '6px' }} />
             </Button>
             <Button variant="primary" onClick={handleSaveEdit} isLoading={editMutation.isPending}>
-              Salvar Alterações
+              Salvar Alterações <Save size={16} style={{ marginLeft: '6px' }} />
             </Button>
           </>
         }
@@ -479,8 +605,8 @@ export default function ReportsPage() {
             <hr style={{ border: '0', borderTop: '1px solid #e2e8f0', margin: '0.5rem 0' }} />
 
             <div>
-              <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.5rem' }}>
-                📜 Histórico de Alterações
+              <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.5rem' }}>
+                <History size={16} /> Histórico de Alterações
               </h4>
 
               {isRecordDetailsLoading ? (
@@ -545,6 +671,52 @@ export default function ReportsPage() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={isCompensateOpen}
+        onClose={handleCloseCompensate}
+        title={`Compensar Jornada - ${compensateRecord?.userName}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={handleCloseCompensate}>
+              Cancelar <CircleX size={16} style={{ marginLeft: '6px' }} />
+            </Button>
+            <Button variant="primary" onClick={handleSaveCompensate} isLoading={isCompensating}>
+              Confirmar Compensação <Check size={16} style={{ marginLeft: '6px' }} />
+            </Button>
+          </>
+        }
+      >
+        {compensateRecord && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div>
+              <strong>Déficit Pendente:</strong> {formatMinutes(compensateRecord.deficit)}
+            </div>
+            <FormGroup>
+              <label htmlFor="compensateHours">Horas a Compensar (Banco)</label>
+              <input
+                type="number"
+                step="0.1"
+                id="compensateHours"
+                value={compensateHours}
+                onChange={(e) => setCompensateHours(e.target.value)}
+                style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
+              />
+            </FormGroup>
+            
+            <FormGroup>
+              <label htmlFor="compensateReason">Justificativa / Motivo</label>
+              <input
+                type="text"
+                id="compensateReason"
+                value={compensateReason}
+                onChange={(e) => setCompensateReason(e.target.value)}
+                style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
+              />
+            </FormGroup>
           </div>
         )}
       </Modal>

@@ -30,6 +30,13 @@ async function main() {
     { key: 'reports.export', description: 'Exportar relatórios para Excel' },
     { key: 'clock.export', description: 'Exportar registros de ponto para Excel' },
     { key: 'clock.edit', description: 'Editar registros de ponto' },
+    { key: 'audit.view', description: 'Visualizar logs de auditoria' },
+    { key: 'audit.export', description: 'Exportar logs de auditoria para Excel' },
+    { key: 'workload.manage', description: 'Gerenciar jornadas de trabalho dos colaboradores' },
+    { key: 'bank_hours.view', description: 'Visualizar saldo e histórico do banco de horas' },
+    { key: 'bank_hours.manage', description: 'Gerenciar lançamentos e ajustes no banco de horas' },
+    { key: 'overtime.view', description: 'Visualizar relatórios de horas extras' },
+    { key: 'overtime.manage', description: 'Gerenciar e aprovar pagamento de horas extras' },
   ];
 
   console.log('Seeding permissions...');
@@ -61,7 +68,7 @@ async function main() {
   });
 
   console.log('Seeding Colaborador Role...');
-  const colaboradorPermKeys = ['clock.register', 'clock.view'];
+  const colaboradorPermKeys = ['clock.register', 'clock.view', 'bank_hours.view'];
   const colaboradorPerms = createdPermissions.filter((p) => colaboradorPermKeys.includes(p.key));
   await prisma.role.upsert({
     where: { name: 'Colaborador' },
@@ -75,9 +82,8 @@ async function main() {
     },
   });
 
-  console.log('Seeding Admin User...');
   const passwordHash = await bcrypt.hash('admin123', 10);
-  await prisma.user.upsert({
+  const adminUser = await prisma.user.upsert({
     where: { email: 'sy@sypos.com.br' },
     update: {
       roleId: adminRole.id,
@@ -90,6 +96,82 @@ async function main() {
       passwordHash,
       active: true,
       roleId: adminRole.id,
+    },
+  });
+
+  const adminSchedule = await prisma.workSchedule.upsert({
+    where: { userId: adminUser.id },
+    update: {},
+    create: {
+      userId: adminUser.id,
+      weeklyHours: 40,
+      expectedDailyHours: 8,
+      mondayEnabled: true,
+      tuesdayEnabled: true,
+      wednesdayEnabled: true,
+      thursdayEnabled: true,
+      fridayEnabled: true,
+      saturdayEnabled: false,
+      sundayEnabled: false,
+      extraHoursMode: 'BANK_HOURS',
+      startTime: '08:00',
+      endTime: '17:00',
+      expectedDailyMinutes: 480,
+      weeklyMinutes: 2400,
+      timezone: 'America/Sao_Paulo',
+      flexibleSchedule: false,
+    },
+  });
+
+  // Seed per-day schedules
+  console.log('Seeding WorkScheduleDays...');
+  for (let day = 0; day < 7; day++) {
+    const isWorking = day >= 1 && day <= 5;
+    await prisma.workScheduleDay.upsert({
+      where: {
+        workScheduleId_dayOfWeek: {
+          workScheduleId: adminSchedule.id,
+          dayOfWeek: day,
+        },
+      },
+      update: {},
+      create: {
+        workScheduleId: adminSchedule.id,
+        dayOfWeek: day,
+        enabled: isWorking,
+        startTime: isWorking ? '08:00' : null,
+        endTime: isWorking ? '17:00' : null,
+        expectedDailyMinutes: isWorking ? 480 : 0,
+      },
+    });
+  }
+
+  // Seed breaks for Mon-Fri
+  console.log('Seeding WorkScheduleBreaks...');
+  const existingBreaks = await prisma.workScheduleBreak.findMany({
+    where: { workScheduleId: adminSchedule.id },
+  });
+  if (existingBreaks.length === 0) {
+    for (let day = 1; day <= 5; day++) {
+      await prisma.workScheduleBreak.create({
+        data: {
+          workScheduleId: adminSchedule.id,
+          dayOfWeek: day,
+          name: 'Almoço',
+          startTime: '12:00',
+          endTime: '13:00',
+          paid: false,
+        },
+      });
+    }
+  }
+
+  await prisma.bankHoursBalance.upsert({
+    where: { userId: adminUser.id },
+    update: {},
+    create: {
+      userId: adminUser.id,
+      currentBalanceMinutes: 0,
     },
   });
 

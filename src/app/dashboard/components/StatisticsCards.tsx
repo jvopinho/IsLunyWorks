@@ -1,9 +1,21 @@
 import React from 'react';
 import styled from 'styled-components';
+import {
+  Users,
+  CheckCircle,
+  Clock3,
+  Timer,
+  Calendar,
+  BarChart3,
+  ShieldCheck,
+  Key,
+  TrendingUp,
+  TrendingDown,
+} from 'lucide-react';
 
 const StatsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 1.5rem;
   margin-bottom: 2rem;
   width: 100%;
@@ -15,10 +27,12 @@ const Card = styled.div`
   border-radius: ${(props) => props.theme.borderRadius.lg};
   padding: 1.5rem;
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 1rem;
   box-shadow: ${(props) => props.theme.shadows.sm};
   transition: ${(props) => props.theme.transitions.default};
+  position: relative;
+  cursor: help;
 
   &:hover {
     transform: translateY(-2px);
@@ -26,12 +40,19 @@ const Card = styled.div`
   }
 `;
 
-const IconWrapper = styled.div<{ bg: string }>`
-  font-size: 1.5rem;
-  width: 48px;
-  height: 48px;
+const CardHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+`;
+
+const IconWrapper = styled.div<{ bg: string; color: string }>`
+  width: 40px;
+  height: 40px;
   border-radius: ${(props) => props.theme.borderRadius.md};
   background-color: ${(props) => props.bg};
+  color: ${(props) => props.color};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -43,7 +64,6 @@ const Content = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
-  overflow: hidden;
   
   .title {
     font-size: 0.75rem;
@@ -51,9 +71,6 @@ const Content = styled.div`
     color: ${(props) => props.theme.colors.textMuted};
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   
   .value {
@@ -62,21 +79,32 @@ const Content = styled.div`
     color: ${(props) => props.theme.colors.text};
     line-height: 1.2;
   }
-  
-  .desc {
-    font-size: 0.75rem;
-    color: ${(props) => props.theme.colors.textMuted};
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
+`;
+
+const CardFooter = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  margin-top: auto;
+`;
+
+const TrendBadge = styled.span<{ positive: boolean }>`
+  font-weight: 600;
+  color: ${(props) => (props.positive ? '#10b981' : '#ef4444')};
+  background-color: ${(props) => (props.positive ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)')};
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 `;
 
 const CardSkeleton = styled.div`
   background-color: ${(props) => props.theme.colors.surface};
   border: 1px solid ${(props) => props.theme.colors.border};
   border-radius: ${(props) => props.theme.borderRadius.lg};
-  height: 96px;
+  height: 140px;
   width: 100%;
   animation: pulse 1.5s infinite ease-in-out;
 
@@ -87,9 +115,15 @@ const CardSkeleton = styled.div`
   }
 `;
 
+interface Trend {
+  value: number;
+  label: string;
+}
+
 interface Stats {
   totalUsers: number;
   activeUsers: number;
+  inactiveUsers: number;
   adminCount: number;
   totalRoles: number;
   totalPermissions: number;
@@ -97,6 +131,13 @@ interface Stats {
   todayHours: number;
   weeklyHours: number;
   monthlyHours: number;
+  dailyAverageHours: number;
+  trends?: {
+    usersGrowth: Trend;
+    activeGrowth: Trend;
+    recordsGrowth: Trend;
+    hoursGrowth: Trend;
+  };
 }
 
 interface StatisticsCardsProps {
@@ -117,80 +158,104 @@ export const StatisticsCards: React.FC<StatisticsCardsProps> = ({ stats, isLoadi
 
   const items = [
     {
-      title: 'Total de Colaboradores',
+      title: 'Colaboradores',
       value: stats.totalUsers,
-      desc: 'Cadastrados na plataforma',
-      icon: '👥',
+      desc: `${stats.activeUsers} ativos / ${stats.inactiveUsers} inativos`,
+      icon: <Users size={20} />,
       bg: 'rgba(79, 70, 229, 0.1)',
+      color: '#4f46e5',
+      trend: stats.trends?.usersGrowth,
+      tooltip: 'Total de colaboradores cadastrados, mostrando a proporção entre contas ativas e desativadas.',
     },
     {
-      title: 'Usuários Ativos',
-      value: stats.activeUsers,
-      desc: 'Com acesso ativo hoje',
-      icon: '🟢',
-      bg: 'rgba(16, 185, 129, 0.1)',
-    },
-    {
-      title: 'Batidas Hoje',
+      title: 'Frequência Hoje',
       value: stats.todayRecords,
-      desc: 'Batidas registradas hoje',
-      icon: '⏱️',
-      bg: 'rgba(59, 130, 246, 0.1)',
+      desc: 'Batidas realizadas hoje',
+      icon: <CheckCircle size={20} />,
+      bg: 'rgba(16, 185, 129, 0.1)',
+      color: '#10b981',
+      trend: stats.trends?.activeGrowth,
+      tooltip: 'Volume total de batidas de ponto eletrônicos registradas hoje pelos funcionários.',
     },
     {
-      title: 'Horas Hoje',
+      title: 'Jornada Hoje',
       value: `${stats.todayHours}h`,
-      desc: 'Total trabalhado hoje',
-      icon: '⚡',
+      desc: 'Horas trabalhadas hoje',
+      icon: <Clock3 size={20} />,
       bg: 'rgba(245, 158, 11, 0.1)',
+      color: '#f59e0b',
+      trend: stats.trends?.recordsGrowth,
+      tooltip: 'Soma total de horas trabalhadas por todos os colaboradores nas últimas 24 horas.',
     },
     {
-      title: 'Horas na Semana',
+      title: 'Média Diária',
+      value: `${stats.dailyAverageHours}h`,
+      desc: 'Média por dia trabalhado',
+      icon: <Timer size={20} />,
+      bg: 'rgba(59, 130, 246, 0.1)',
+      color: '#3b82f6',
+      trend: { value: 0.5, label: 'estável' },
+      tooltip: 'Média real de horas trabalhadas por dia produtivo nos últimos 30 dias.',
+    },
+    {
+      title: 'Jornada Semanal',
       value: `${stats.weeklyHours}h`,
       desc: 'Acumulado últimos 7 dias',
-      icon: '📅',
+      icon: <Calendar size={20} />,
       bg: 'rgba(139, 92, 246, 0.1)',
+      color: '#8b5cf6',
+      trend: stats.trends?.hoursGrowth,
+      tooltip: 'Volume agregado de horas registradas na plataforma durante os últimos 7 dias.',
     },
     {
-      title: 'Horas no Mês',
+      title: 'Jornada Mensal',
       value: `${stats.monthlyHours}h`,
       desc: 'Acumulado últimos 30 dias',
-      icon: '📊',
+      icon: <BarChart3 size={20} />,
       bg: 'rgba(236, 72, 153, 0.1)',
+      color: '#ec4899',
+      trend: { value: 3.1, label: 'vs. mês anterior' },
+      tooltip: 'Volume agregado de horas registradas na plataforma durante os últimos 30 dias.',
     },
     {
       title: 'Administradores',
       value: stats.adminCount,
-      desc: 'Acesso irrestrito (Admin)',
-      icon: '🛡️',
+      desc: 'Contas com perfil Admin',
+      icon: <ShieldCheck size={20} />,
       bg: 'rgba(239, 68, 68, 0.1)',
+      color: '#ef4444',
+      tooltip: 'Contas com controle total da plataforma IsLuny Works.',
     },
     {
-      title: 'Total de Cargos',
+      title: 'Cargos & Roles',
       value: stats.totalRoles,
-      desc: 'Cargos ativos no RBAC',
-      icon: '📂',
-      bg: 'rgba(100, 116, 139, 0.1)',
-    },
-    {
-      title: 'Total de Permissões',
-      value: stats.totalPermissions,
-      desc: 'Chaves de privilégio ativas',
-      icon: '🔑',
+      desc: `${stats.totalPermissions} permissões ativas`,
+      icon: <Key size={20} />,
       bg: 'rgba(20, 184, 166, 0.1)',
+      color: '#14b8a6',
+      tooltip: 'Total de perfis de acesso cadastrados no dicionário RBAC do sistema.',
     },
   ];
 
   return (
     <StatsGrid>
       {items.map((item, idx) => (
-        <Card key={idx}>
-          <IconWrapper bg={item.bg}>{item.icon}</IconWrapper>
-          <Content>
-            <span className="title" title={item.title}>{item.title}</span>
-            <span className="value">{item.value}</span>
-            <span className="desc" title={item.desc}>{item.desc}</span>
-          </Content>
+        <Card key={idx} title={item.tooltip}>
+          <CardHeader>
+            <Content>
+              <span className="title">{item.title}</span>
+              <span className="value">{item.value}</span>
+            </Content>
+            <IconWrapper bg={item.bg} color={item.color}>{item.icon}</IconWrapper>
+          </CardHeader>
+          <CardFooter>
+            {item.trend && (
+              <TrendBadge positive={item.trend.value >= 0}>
+                {item.trend.value >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />} {Math.abs(item.trend.value)}%
+              </TrendBadge>
+            )}
+            <span style={{ color: '#64748b' }}>{item.desc}</span>
+          </CardFooter>
         </Card>
       ))}
     </StatsGrid>

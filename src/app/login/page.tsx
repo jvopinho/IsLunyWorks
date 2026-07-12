@@ -7,6 +7,8 @@ import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { loginSchema, LoginInput } from '@/validations/auth';
 import { Button } from '@/components/Button';
+import { Logo } from '@/components/Logo';
+import { LogIn } from 'lucide-react';
 import { Container, CardWrapper, Title, Subtitle, Form, InputGroup, ErrorBanner } from './styles';
 
 export default function LoginPage() {
@@ -48,8 +50,12 @@ export default function LoginPage() {
   return (
     <Container>
       <CardWrapper>
-        <Title>❄️ IsLuny Works</Title>
-        <Subtitle>Entre com suas credenciais para acessar a plataforma</Subtitle>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem' }}>
+          <Logo size="lg" />
+          <span style={{ fontSize: '0.875rem', color: '#64748b', marginTop: '0.5rem', textAlign: 'center', fontWeight: 500 }}>
+            Plataforma de Gestão Interna da IsLuny Org
+          </span>
+        </div>
         
         {error && <ErrorBanner>{error}</ErrorBanner>}
         
@@ -77,7 +83,7 @@ export default function LoginPage() {
           </InputGroup>
 
           <Button type="submit" variant="primary" fullWidth size="lg" isLoading={isLoading}>
-            Entrar no sistema
+            Entrar no sistema <LogIn size={18} style={{ marginLeft: '6px' }} />
           </Button>
         </Form>
       </CardWrapper>

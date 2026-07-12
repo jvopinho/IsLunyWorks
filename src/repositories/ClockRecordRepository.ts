@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { calculateRecordWorkload } from '@/utils/workload';
 
 export class ClockRecordRepository {
   static async findLastActiveRecord(userId: string) {
@@ -38,20 +39,63 @@ export class ClockRecordRepository {
       Math.round((clockOut.getTime() - record.clockIn.getTime()) / 60000)
     );
 
-    // Merge notes if new notes are provided
+    const schedule = await prisma.workSchedule.findUnique({
+      where: { userId: record.userId },
+      include: {
+        days: true,
+        breaks: true,
+      },
+    });
+
+    const workload = calculateRecordWorkload(record.clockIn, clockOut, totalMinutes, schedule);
+
     const updatedNotes = notes
       ? record.notes
         ? `${record.notes} | Saída: ${notes}`
         : notes
       : record.notes;
 
-    return prisma.clockRecord.update({
-      where: { id },
-      data: {
-        clockOut,
-        totalMinutes,
-        notes: updatedNotes,
-      },
+    return prisma.$transaction(async (tx) => {
+      const updatedRecord = await tx.clockRecord.update({
+        where: { id },
+        data: {
+          clockOut,
+          totalMinutes,
+          expectedMinutes: workload.expectedMinutes,
+          normalMinutes: workload.normalMinutes,
+          extraMinutes: workload.extraMinutes,
+          bankMinutes: workload.bankMinutes,
+          deficitMinutes: workload.deficitMinutes,
+          plannedIn: workload.plannedIn,
+          plannedOut: workload.plannedOut,
+          plannedBreakMinutes: workload.plannedBreakMinutes,
+          actualBreakMinutes: workload.actualBreakMinutes,
+          delayInMinutes: workload.delayInMinutes,
+          earlyOutMinutes: workload.earlyOutMinutes,
+          extraOutMinutes: workload.extraOutMinutes,
+          notes: updatedNotes,
+        },
+      });
+
+      if (workload.bankMinutes > 0) {
+        await tx.bankHoursBalance.upsert({
+          where: { userId: record.userId },
+          update: { currentBalanceMinutes: { increment: workload.bankMinutes } },
+          create: { userId: record.userId, currentBalanceMinutes: workload.bankMinutes },
+        });
+
+        await tx.bankHoursTransaction.create({
+          data: {
+            userId: record.userId,
+            type: 'WORKED_EXTRA',
+            minutes: workload.bankMinutes,
+            reason: 'Horas excedentes acumuladas na jornada',
+            referenceId: id,
+          },
+        });
+      }
+
+      return updatedRecord;
     });
   }
 

@@ -12,9 +12,17 @@ export const HeaderContainer = styled.header`
   top: 0;
   z-index: 90;
   box-shadow: ${(props) => props.theme.shadows.sm};
+
+  .header-logo-mobile {
+    display: none;
+  }
   
   @media (max-width: 768px) {
     padding: 0 1rem;
+
+    .header-logo-mobile {
+      display: block;
+    }
   }
 `;
 

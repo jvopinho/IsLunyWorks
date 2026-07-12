@@ -10,17 +10,20 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  name         String
-  email        String        @unique
-  passwordHash String
-  active       Boolean       @default(true)
-  roleId       String
-  role         Role          @relation(fields: [roleId], references: [id])
-  clockRecords ClockRecord[]
-  auditLogs    AuditLog[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                    String                  @id @default(uuid())
+  name                  String
+  email                 String                  @unique
+  passwordHash          String
+  active                Boolean                 @default(true)
+  roleId                String
+  role                  Role                    @relation(fields: [roleId], references: [id])
+  clockRecords          ClockRecord[]
+  auditLogs             AuditLog[]
+  workSchedule          WorkSchedule?
+  bankHoursBalance      BankHoursBalance?
+  bankHoursTransactions BankHoursTransaction[]
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
 
   @@index([email])
 }
@@ -47,14 +50,26 @@ model Permission {
 }
 
 model ClockRecord {
-  id           String    @id @default(uuid())
-  userId       String
-  user         User      @relation(fields: [userId], references: [id])
-  clockIn      DateTime
-  clockOut     DateTime?
-  totalMinutes Int?
-  notes        String?
-  createdAt    DateTime  @default(now())
+  id                  String    @id @default(uuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id])
+  clockIn             DateTime
+  clockOut            DateTime?
+  totalMinutes        Int?
+  expectedMinutes     Int       @default(0)
+  normalMinutes       Int       @default(0)
+  extraMinutes        Int       @default(0)
+  bankMinutes         Int       @default(0)
+  deficitMinutes      Int       @default(0)
+  plannedIn           DateTime?
+  plannedOut          DateTime?
+  plannedBreakMinutes Int       @default(0)
+  actualBreakMinutes  Int       @default(0)
+  delayInMinutes      Int       @default(0)
+  earlyOutMinutes     Int       @default(0)
+  extraOutMinutes     Int       @default(0)
+  notes               String?
+  createdAt           DateTime  @default(now())
 
   @@index([userId])
   @@index([clockIn])
@@ -69,7 +84,101 @@ model AuditLog {
   entityId  String?
   details   String?
   reason    String?
+  ipAddress String?
+  userAgent String?
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum ExtraHoursMode {
+  BANK_HOURS
+  OVERTIME
+}
+
+enum BankTransactionType {
+  WORKED_EXTRA
+  MANUAL_CREDIT
+  MANUAL_DEBIT
+  USED_IN_WORKDAY
+  ADJUSTMENT
+}
+
+model WorkSchedule {
+  id                 String              @id @default(uuid())
+  userId             String              @unique
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weeklyHours        Float               @default(40.0)
+  expectedDailyHours Float               @default(8.0)
+  mondayEnabled      Boolean             @default(true)
+  tuesdayEnabled     Boolean             @default(true)
+  wednesdayEnabled   Boolean             @default(true)
+  thursdayEnabled    Boolean             @default(true)
+  fridayEnabled      Boolean             @default(true)
+  saturdayEnabled    Boolean             @default(false)
+  sundayEnabled      Boolean             @default(false)
+  extraHoursMode     ExtraHoursMode      @default(BANK_HOURS)
+  startTime          String?             @default("08:00")
+  endTime            String?             @default("17:00")
+  expectedDailyMinutes Int               @default(480)
+  weeklyMinutes       Int               @default(2400)
+  timezone            String              @default("America/Sao_Paulo")
+  flexibleSchedule   Boolean             @default(false)
+  days               WorkScheduleDay[]
+  breaks             WorkScheduleBreak[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model WorkScheduleDay {
+  id                 String       @id @default(uuid())
+  workScheduleId     String
+  workSchedule       WorkSchedule @relation(fields: [workScheduleId], references: [id], onDelete: Cascade)
+  dayOfWeek          Int
+  enabled            Boolean      @default(true)
+  startTime          String?      @default("08:00")
+  endTime            String?      @default("17:00")
+  expectedDailyMinutes Int        @default(480)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([workScheduleId, dayOfWeek])
+}
+
+model WorkScheduleBreak {
+  id             String       @id @default(uuid())
+  workScheduleId String
+  workSchedule   WorkSchedule @relation(fields: [workScheduleId], references: [id], onDelete: Cascade)
+  dayOfWeek      Int
+  name           String
+  startTime      String
+  endTime        String
+  paid           Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([workScheduleId])
+}
+
+model BankHoursBalance {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentBalanceMinutes Int      @default(0)
+  updatedAt             DateTime @updatedAt
+}
+
+model BankHoursTransaction {
+  id          String              @id @default(uuid())
+  userId      String
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        BankTransactionType
+  minutes     Int
+  reason      String
+  referenceId String?
+  createdBy   String?
+  createdAt   DateTime            @default(now())
 
   @@index([userId])
   @@index([createdAt])

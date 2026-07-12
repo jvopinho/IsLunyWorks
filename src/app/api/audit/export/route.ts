@@ -7,7 +7,7 @@ import { AuditLogRepository } from '@/repositories/AuditLogRepository';
 
 export async function GET(request: NextRequest) {
   try {
-    const actor = await checkAuthAndPermission('admin');
+    const actor = await checkAuthAndPermission('audit.export');
 
     const logs = await prisma.auditLog.findMany({
       include: {

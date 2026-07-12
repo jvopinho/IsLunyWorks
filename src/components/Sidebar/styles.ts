@@ -59,7 +59,8 @@ export const NavGroupTitle = styled.div<{ collapsed?: boolean }>`
   letter-spacing: 0.05em;
   color: rgba(255, 255, 255, 0.3);
   padding: 0.75rem 0.75rem 0.25rem;
-  display: ${(props) => (props.collapsed ? 'none' : 'block')};
+  display: ${(props) => (props.collapsed ? 'none' : 'flex')};
+  align-items: center;
   user-select: none;
 `;
 

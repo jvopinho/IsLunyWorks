@@ -28,6 +28,12 @@ export default withAuth(
     if (path.startsWith('/clock') && !hasPermission(userPayload, 'clock.register')) {
       return NextResponse.redirect(new URL('/dashboard', req.url));
     }
+    if (path.startsWith('/audit') && !hasPermission(userPayload, 'audit.view')) {
+      return NextResponse.redirect(new URL('/dashboard', req.url));
+    }
+    if (path.startsWith('/bank-hours') && !hasPermission(userPayload, 'bank_hours.view')) {
+      return NextResponse.redirect(new URL('/dashboard', req.url));
+    }
 
     return NextResponse.next();
   },
@@ -46,5 +52,7 @@ export const config = {
     '/permissions/:path*',
     '/reports/:path*',
     '/clock/:path*',
+    '/audit/:path*',
+    '/bank-hours/:path*',
   ],
 };

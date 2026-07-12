@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "ClockRecord" ADD COLUMN     "bankMinutes" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "deficitMinutes" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "expectedMinutes" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "extraMinutes" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "normalMinutes" INTEGER NOT NULL DEFAULT 0;
