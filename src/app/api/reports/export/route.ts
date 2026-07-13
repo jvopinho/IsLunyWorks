@@ -129,15 +129,15 @@ export async function GET(request: NextRequest) {
       totalUsed += used;
       totalDeficit += deficit;
 
-      let status = '🔴 Jornada não cumprida';
+      let status = 'Jornada nao cumprida';
       if (expected > 0) {
         if (deficit === 0) {
-          status = '🟢 Jornada cumprida';
+          status = 'Jornada cumprida';
         } else if (worked > 0) {
-          status = '🟡 Jornada parcialmente cumprida';
+          status = 'Jornada parcialmente cumprida';
         }
       } else {
-        status = worked > 0 ? '🟢 Jornada cumprida (Extra)' : '⚪ Sem expediente';
+        status = worked > 0 ? 'Jornada cumprida (Extra)' : 'Sem expediente';
       }
 
       const plannedInStr = rec.plannedIn ? new Date(rec.plannedIn).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-';

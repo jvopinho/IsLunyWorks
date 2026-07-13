@@ -14,6 +14,7 @@ export const MainContent = styled.main<{ collapsed?: boolean }>`
   min-height: 100vh;
   transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  min-width: 0;
   
   @media (max-width: 768px) {
     margin-left: 0;
@@ -25,6 +26,7 @@ export const ContentWrapper = styled.div`
   padding: 2rem;
   background-color: ${(props) => props.theme.colors.background};
   overflow-y: auto;
+  min-width: 0;
   
   @media (max-width: 768px) {
     padding: 1.5rem 1rem;

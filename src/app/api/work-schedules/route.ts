@@ -79,6 +79,13 @@ export async function POST(request: NextRequest) {
         weeklyMinutes: parseInt(weeklyMinutes, 10),
         timezone,
         flexibleSchedule: Boolean(flexibleSchedule),
+        mondayEnabled: true,
+        tuesdayEnabled: true,
+        wednesdayEnabled: true,
+        thursdayEnabled: true,
+        fridayEnabled: true,
+        saturdayEnabled: false,
+        sundayEnabled: false,
       },
     });
 

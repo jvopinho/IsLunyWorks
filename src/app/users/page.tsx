@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useForm } from 'react-hook-form';
@@ -171,6 +171,104 @@ export default function UsersPage() {
     reset();
   };
 
+  const calculateExpectedMinutesForDay = (
+    dayOfWeek: number,
+    enabled: boolean,
+    startTime: string | null,
+    endTime: string | null,
+    breaksList: any[]
+  ) => {
+    if (!enabled || !startTime || !endTime) return 0;
+    const [sh, sm] = startTime.split(':').map(Number);
+    const [eh, em] = endTime.split(':').map(Number);
+    let diff = (eh * 60 + em) - (sh * 60 + sm);
+    if (diff < 0) diff += 24 * 60; // overnight shift
+
+    const dayBreaks = breaksList.filter((b) => b.dayOfWeek === dayOfWeek && !b.paid);
+    let breakMins = 0;
+    for (const b of dayBreaks) {
+      const [bsh, bsm] = b.startTime.split(':').map(Number);
+      const [beh, bem] = b.endTime.split(':').map(Number);
+      let bdiff = (beh * 60 + bem) - (bsh * 60 + bsm);
+      if (bdiff < 0) bdiff += 24 * 60;
+      breakMins += bdiff;
+    }
+    return Math.max(0, diff - breakMins);
+  };
+
+  const handleToggleDayOfWeek = (dayOfWeek: number, enabled: boolean) => {
+    if (dayOfWeek === 1) setMondayEnabled(enabled);
+    else if (dayOfWeek === 2) setTuesdayEnabled(enabled);
+    else if (dayOfWeek === 3) setWednesdayEnabled(enabled);
+    else if (dayOfWeek === 4) setThursdayEnabled(enabled);
+    else if (dayOfWeek === 5) setFridayEnabled(enabled);
+    else if (dayOfWeek === 6) setSaturdayEnabled(enabled);
+    else if (dayOfWeek === 0) setSundayEnabled(enabled);
+
+    setSchedDays((prev) => {
+      const existingIdx = prev.findIndex((d) => d.dayOfWeek === dayOfWeek);
+      const updated = [...prev];
+      if (existingIdx !== -1) {
+        const item = updated[existingIdx];
+        const start = enabled ? (item.startTime || schedStartTime || '08:00') : null;
+        const end = enabled ? (item.endTime || schedEndTime || '17:00') : null;
+        updated[existingIdx] = {
+          ...item,
+          enabled,
+          startTime: start,
+          endTime: end,
+          expectedDailyMinutes: calculateExpectedMinutesForDay(dayOfWeek, enabled, start, end, schedBreaks),
+        };
+      } else {
+        const start = enabled ? (schedStartTime || '08:00') : null;
+        const end = enabled ? (schedEndTime || '17:00') : null;
+        updated.push({
+          dayOfWeek,
+          enabled,
+          startTime: start,
+          endTime: end,
+          expectedDailyMinutes: calculateExpectedMinutesForDay(dayOfWeek, enabled, start, end, schedBreaks),
+        });
+      }
+      return updated.sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+    });
+  };
+
+  const handleDayTimeChange = (idx: number, field: 'startTime' | 'endTime', value: string) => {
+    setSchedDays((prev) => {
+      const updated = [...prev];
+      const item = updated[idx];
+      const newStart = field === 'startTime' ? value : item.startTime;
+      const newEnd = field === 'endTime' ? value : item.endTime;
+      updated[idx] = {
+        ...item,
+        startTime: newStart,
+        endTime: newEnd,
+        expectedDailyMinutes: calculateExpectedMinutesForDay(item.dayOfWeek, item.enabled, newStart, newEnd, schedBreaks),
+      };
+      return updated;
+    });
+  };
+
+  const syncDaysExpectedMinutes = (daysList: any[], breaksList: any[]) => {
+    return daysList.map((d) => ({
+      ...d,
+      expectedDailyMinutes: calculateExpectedMinutesForDay(d.dayOfWeek, d.enabled, d.startTime, d.endTime, breaksList),
+    }));
+  };
+
+  useEffect(() => {
+    if (!isWorkloadOpen) return;
+    const activeDays = schedDays.filter((d) => d.enabled);
+    const totalMinutes = schedDays.reduce((sum, d) => sum + (d.enabled ? d.expectedDailyMinutes : 0), 0);
+    setWeeklyHours(parseFloat((totalMinutes / 60).toFixed(1)));
+    if (activeDays.length > 0) {
+      setExpectedDailyHours(parseFloat(((totalMinutes / activeDays.length) / 60).toFixed(1)));
+    } else {
+      setExpectedDailyHours(0);
+    }
+  }, [schedDays, isWorkloadOpen]);
+
   const handleOpenWorkload = async (user: any) => {
     setWorkloadUser(user);
     try {
@@ -191,7 +289,34 @@ export default function UsersPage() {
         setFlexibleSchedule(schedule.flexibleSchedule || false);
         setSchedStartTime(schedule.startTime || '08:00');
         setSchedEndTime(schedule.endTime || '17:00');
-        setSchedDays(schedule.days || []);
+
+        const daysFromDb = schedule.days || [];
+        const populatedDays = [0, 1, 2, 3, 4, 5, 6].map((dayNum) => {
+          const existingDay = daysFromDb.find((d: any) => d.dayOfWeek === dayNum);
+          if (existingDay) {
+            return existingDay;
+          }
+          const enabled = dayNum === 1 ? schedule.mondayEnabled
+            : dayNum === 2 ? schedule.tuesdayEnabled
+            : dayNum === 3 ? schedule.wednesdayEnabled
+            : dayNum === 4 ? schedule.thursdayEnabled
+            : dayNum === 5 ? schedule.fridayEnabled
+            : dayNum === 6 ? schedule.saturdayEnabled
+            : schedule.sundayEnabled;
+          
+          const isWorking = dayNum >= 1 && dayNum <= 5;
+          const start = enabled ? (schedule.startTime || '08:00') : null;
+          const end = enabled ? (schedule.endTime || '17:00') : null;
+          return {
+            dayOfWeek: dayNum,
+            enabled,
+            startTime: start,
+            endTime: end,
+            expectedDailyMinutes: calculateExpectedMinutesForDay(dayNum, enabled, start, end, schedule.breaks || []),
+          };
+        });
+
+        setSchedDays(populatedDays.sort((a, b) => a.dayOfWeek - b.dayOfWeek));
         setSchedBreaks(schedule.breaks || []);
       } else {
         setScheduleId('');
@@ -208,7 +333,21 @@ export default function UsersPage() {
         setFlexibleSchedule(false);
         setSchedStartTime('08:00');
         setSchedEndTime('17:00');
-        setSchedDays([]);
+
+        const populatedDays = [0, 1, 2, 3, 4, 5, 6].map((dayNum) => {
+          const enabled = dayNum >= 1 && dayNum <= 5;
+          const start = enabled ? '08:00' : null;
+          const end = enabled ? '17:00' : null;
+          return {
+            dayOfWeek: dayNum,
+            enabled,
+            startTime: start,
+            endTime: end,
+            expectedDailyMinutes: enabled ? 480 : 0,
+          };
+        });
+
+        setSchedDays(populatedDays.sort((a, b) => a.dayOfWeek - b.dayOfWeek));
         setSchedBreaks([]);
       }
       setIsWorkloadOpen(true);
@@ -222,6 +361,24 @@ export default function UsersPage() {
       alert('Nenhuma configuração de jornada encontrada para este usuário.');
       return;
     }
+
+    const hasActiveDay = schedDays.some((d: any) => d.enabled === true);
+    if (!hasActiveDay) {
+      alert('Pelo menos um dia de expediente deve estar ativo.');
+      return;
+    }
+
+    for (const d of schedDays) {
+      if (d.enabled) {
+        if (!d.startTime || !d.endTime) {
+          alert('Todos os dias de expediente ativos devem possuir uma configuração válida de horários de entrada e saída.');
+          return;
+        }
+      }
+    }
+
+    const reason = prompt('Justificativa para a alteração da jornada (opcional):') || 'Atualização de jornada de trabalho pelo gestor';
+
     setIsSavingSchedule(true);
     try {
       await axios.patch(`/api/work-schedules/${scheduleId}`, {
@@ -245,6 +402,7 @@ export default function UsersPage() {
           endTime: d.endTime,
           expectedDailyMinutes: d.expectedDailyMinutes,
         })),
+        reason,
       });
       setIsWorkloadOpen(false);
       setWorkloadUser(null);
@@ -269,7 +427,10 @@ export default function UsersPage() {
         endTime: newBreakEnd,
         paid: newBreakPaid,
       });
-      setSchedBreaks([...schedBreaks, res.data]);
+      const newBreaks = [...schedBreaks, res.data];
+      setSchedBreaks(newBreaks);
+      setSchedDays((prev) => syncDaysExpectedMinutes(prev, newBreaks));
+
       setNewBreakName('');
       setNewBreakStart('12:00');
       setNewBreakEnd('13:00');
@@ -283,7 +444,9 @@ export default function UsersPage() {
     if (!confirm('Deseja remover este intervalo?')) return;
     try {
       await axios.delete(`/api/work-schedules/breaks/${breakId}`);
-      setSchedBreaks(schedBreaks.filter((b: any) => b.id !== breakId));
+      const newBreaks = schedBreaks.filter((b: any) => b.id !== breakId);
+      setSchedBreaks(newBreaks);
+      setSchedDays((prev) => syncDaysExpectedMinutes(prev, newBreaks));
     } catch (err: any) {
       alert(err.response?.data?.error || 'Erro ao remover intervalo.');
     }
@@ -474,24 +637,24 @@ export default function UsersPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxHeight: '70vh', overflowY: 'auto', paddingRight: '0.25rem' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <FormGroup>
-              <label htmlFor="weeklyHours">Horas Semanais</label>
+              <label htmlFor="weeklyHours">Horas Semanais (Calculado)</label>
               <input
                 type="number"
                 id="weeklyHours"
                 value={weeklyHours}
-                onChange={(e) => setWeeklyHours(parseFloat(e.target.value))}
-                style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
+                disabled
+                style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px', backgroundColor: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' }}
               />
             </FormGroup>
             
             <FormGroup>
-              <label htmlFor="expectedDailyHours">Horas Previstas/Dia</label>
+              <label htmlFor="expectedDailyHours">Horas Previstas/Dia (Calculado)</label>
               <input
                 type="number"
                 id="expectedDailyHours"
                 value={expectedDailyHours}
-                onChange={(e) => setExpectedDailyHours(parseFloat(e.target.value))}
-                style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
+                disabled
+                style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px', backgroundColor: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' }}
               />
             </FormGroup>
           </div>
@@ -550,25 +713,25 @@ export default function UsersPage() {
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={mondayEnabled} onChange={(e) => setMondayEnabled(e.target.checked)} /> Segunda-feira
+                <input type="checkbox" checked={mondayEnabled} onChange={(e) => handleToggleDayOfWeek(1, e.target.checked)} /> Segunda-feira
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={tuesdayEnabled} onChange={(e) => setTuesdayEnabled(e.target.checked)} /> Terça-feira
+                <input type="checkbox" checked={tuesdayEnabled} onChange={(e) => handleToggleDayOfWeek(2, e.target.checked)} /> Terça-feira
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={wednesdayEnabled} onChange={(e) => setWednesdayEnabled(e.target.checked)} /> Quarta-feira
+                <input type="checkbox" checked={wednesdayEnabled} onChange={(e) => handleToggleDayOfWeek(3, e.target.checked)} /> Quarta-feira
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={thursdayEnabled} onChange={(e) => setThursdayEnabled(e.target.checked)} /> Quinta-feira
+                <input type="checkbox" checked={thursdayEnabled} onChange={(e) => handleToggleDayOfWeek(4, e.target.checked)} /> Quinta-feira
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={fridayEnabled} onChange={(e) => setFridayEnabled(e.target.checked)} /> Sexta-feira
+                <input type="checkbox" checked={fridayEnabled} onChange={(e) => handleToggleDayOfWeek(5, e.target.checked)} /> Sexta-feira
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={saturdayEnabled} onChange={(e) => setSaturdayEnabled(e.target.checked)} /> Sábado
+                <input type="checkbox" checked={saturdayEnabled} onChange={(e) => handleToggleDayOfWeek(6, e.target.checked)} /> Sábado
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={sundayEnabled} onChange={(e) => setSundayEnabled(e.target.checked)} /> Domingo
+                <input type="checkbox" checked={sundayEnabled} onChange={(e) => handleToggleDayOfWeek(0, e.target.checked)} /> Domingo
               </label>
             </div>
           </div>
@@ -580,34 +743,32 @@ export default function UsersPage() {
                 <Clock3 size={14} /> Horários por Dia da Semana
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {schedDays.sort((a: any, b: any) => a.dayOfWeek - b.dayOfWeek).map((day: any, idx: number) => {
+                {schedDays.map((day: any, idx: number) => {
                   const DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
                   return (
-                    <div key={day.id || idx} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr 80px', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: day.enabled ? 'transparent' : '#f8fafc' }}>
+                    <div key={day.dayOfWeek} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr 80px', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: day.enabled ? 'transparent' : '#f8fafc' }}>
                       <span style={{ fontWeight: 600, color: day.enabled ? '#0f172a' : '#94a3b8' }}>{DAYS[day.dayOfWeek]}</span>
                       <input
                         type="time"
                         value={day.startTime || ''}
                         disabled={!day.enabled}
-                        onChange={(e) => {
-                          const updated = [...schedDays];
-                          updated[idx] = { ...updated[idx], startTime: e.target.value };
-                          setSchedDays(updated);
-                        }}
+                        onChange={(e) => handleDayTimeChange(idx, 'startTime', e.target.value)}
                         style={{ padding: '0.25rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem' }}
                       />
                       <input
                         type="time"
                         value={day.endTime || ''}
                         disabled={!day.enabled}
-                        onChange={(e) => {
-                          const updated = [...schedDays];
-                          updated[idx] = { ...updated[idx], endTime: e.target.value };
-                          setSchedDays(updated);
-                        }}
+                        onChange={(e) => handleDayTimeChange(idx, 'endTime', e.target.value)}
                         style={{ padding: '0.25rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem' }}
                       />
-                      <span style={{ color: '#64748b', textAlign: 'center' }}>{day.enabled ? `${(day.expectedDailyMinutes / 60).toFixed(0)}h` : 'Folga'}</span>
+                      <span style={{ color: '#64748b', textAlign: 'center' }}>
+                        {day.enabled ? (() => {
+                          const h = Math.floor(day.expectedDailyMinutes / 60);
+                          const m = day.expectedDailyMinutes % 60;
+                          return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`;
+                        })() : 'Folga'}
+                      </span>
                     </div>
                   );
                 })}

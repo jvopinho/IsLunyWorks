@@ -23,6 +23,9 @@ export default function ReportsPage() {
   const [filterStart, setFilterStart] = useState('');
   const [filterEnd, setFilterEnd] = useState('');
   
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(15);
+
   const queryClient = useQueryClient();
   const [queryParams, setQueryParams] = useState({
     userId: '',
@@ -94,7 +97,7 @@ export default function ReportsPage() {
   });
 
   const { data: reportData, isLoading } = useQuery<any>({
-    queryKey: ['reports', queryParams],
+    queryKey: ['reports', queryParams, currentPage, itemsPerPage],
     queryFn: async () => {
       const { userId, startDate, endDate } = queryParams;
       let url = '/api/reports/work-hours?';
@@ -104,6 +107,8 @@ export default function ReportsPage() {
       if (startDate) url += `startDate=${startDate}&`;
       if (endDate) url += `endDate=${endDate}&`;
       
+      url += `page=${currentPage}&limit=${itemsPerPage}&`;
+      
       const res = await axios.get(url);
       return res.data;
     },
@@ -111,6 +116,7 @@ export default function ReportsPage() {
   });
 
   const handleApplyFilters = () => {
+    setCurrentPage(1);
     setQueryParams({
       userId: filterUser,
       startDate: filterStart,
@@ -122,6 +128,7 @@ export default function ReportsPage() {
     setFilterUser('');
     setFilterStart('');
     setFilterEnd('');
+    setCurrentPage(1);
     setQueryParams({
       userId: '',
       startDate: '',
@@ -262,26 +269,31 @@ export default function ReportsPage() {
     {
       key: 'user',
       header: 'Colaborador',
+      width: '180px',
       render: (row) => row.userName || '-',
     },
     {
       key: 'date',
       header: 'Data',
+      width: '90px',
       render: (row) => formatDate(row.clockIn),
     },
     {
       key: 'plannedIn',
       header: 'Entrada Prevista',
+      width: '110px',
       render: (row) => row.plannedIn ? new Date(row.plannedIn).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-',
     },
     {
       key: 'clockIn',
       header: 'Entrada Realizada',
+      width: '130px',
       render: (row) => formatDateTime(row.clockIn),
     },
     {
       key: 'delay',
       header: 'Atraso Entrada',
+      width: '110px',
       render: (row) => row.delayInMinutes > 0 ? (
         <span style={{ color: '#ef4444', fontWeight: 600 }}>+{row.delayInMinutes} min</span>
       ) : (
@@ -291,16 +303,19 @@ export default function ReportsPage() {
     {
       key: 'plannedOut',
       header: 'Saída Prevista',
+      width: '110px',
       render: (row) => row.plannedOut ? new Date(row.plannedOut).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-',
     },
     {
       key: 'clockOut',
       header: 'Saída Realizada',
+      width: '130px',
       render: (row) => row.clockOut ? formatDateTime(row.clockOut) : <span style={{ color: '#eab308', fontWeight: '500' }}>Em aberto</span>,
     },
     {
       key: 'outDiff',
       header: 'Desvio Saída',
+      width: '110px',
       render: (row) => {
         if (row.earlyOutMinutes > 0) {
           return <span style={{ color: '#ef4444', fontWeight: 600 }}>-{row.earlyOutMinutes} min</span>;
@@ -314,46 +329,55 @@ export default function ReportsPage() {
     {
       key: 'expected',
       header: 'Tempo Previsto',
+      width: '100px',
       render: (row) => formatMinutes(row.expected),
     },
     {
       key: 'worked',
       header: 'Tempo Trabalhado',
+      width: '110px',
       render: (row) => formatMinutes(row.worked),
     },
     {
       key: 'breaks',
       header: 'Tempo em Pausa',
+      width: '110px',
       render: (row) => formatMinutes(row.actualBreakMinutes),
     },
     {
       key: 'normal',
       header: 'Normais',
+      width: '80px',
       render: (row) => formatMinutes(row.normal),
     },
     {
       key: 'extra',
       header: 'Extras',
+      width: '80px',
       render: (row) => formatMinutes(row.extra),
     },
     {
       key: 'bank',
       header: 'Banco (+)',
+      width: '90px',
       render: (row) => formatMinutes(row.bank),
     },
     {
       key: 'used',
       header: 'Banco Usado (-)',
+      width: '110px',
       render: (row) => formatMinutes(row.used),
     },
     {
       key: 'deficit',
       header: 'Déficit',
+      width: '85px',
       render: (row) => formatMinutes(row.deficit),
     },
     {
       key: 'status',
       header: 'Status',
+      width: '180px',
       render: (row) => {
         let color = '#ef4444';
         if (row.status.includes('cumprida') && !row.status.includes('parcialmente') && !row.status.includes('não')) {
@@ -369,10 +393,23 @@ export default function ReportsPage() {
     {
       key: 'notes',
       header: 'Observações',
+      width: '200px',
+      allowWrap: true,
+      render: (row) => (
+        <div style={{ 
+          whiteSpace: 'normal', 
+          wordBreak: 'break-word',
+          fontSize: '0.8rem',
+          color: '#64748b'
+        }}>
+          {row.notes || '-'}
+        </div>
+      )
     },
     {
       key: 'actions',
       header: 'Ações',
+      width: '160px',
       render: (row) => (
         <div style={{ display: 'flex', gap: '0.25rem' }}>
           {can('clock.edit') && (
@@ -472,6 +509,17 @@ export default function ReportsPage() {
             columns={can('users.view') ? columns : columns.filter(c => c.key !== 'user')}
             data={records}
             emptyMessage="Nenhum registro encontrado para os filtros selecionados."
+            pagination={{
+              currentPage,
+              totalPages: reportData?.totalPages || 1,
+              totalRecords: reportData?.total || 0,
+              limit: itemsPerPage,
+              onPageChange: (page) => setCurrentPage(page),
+              onLimitChange: (limit) => {
+                setItemsPerPage(limit);
+                setCurrentPage(1);
+              },
+            }}
           />
         )}
       </Card>

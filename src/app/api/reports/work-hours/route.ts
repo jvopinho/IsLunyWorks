@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get('userId') || undefined;
     const startDate = searchParams.get('startDate') ? new Date(searchParams.get('startDate')!) : undefined;
     const endDate = searchParams.get('endDate') ? new Date(searchParams.get('endDate')!) : undefined;
-
+    const pageParam = searchParams.get('page');
+    const limitParam = searchParams.get('limit');
     const whereClause: any = {};
     if (userId) whereClause.userId = userId;
     if (startDate || endDate) {
@@ -172,8 +173,26 @@ export async function GET(request: NextRequest) {
       ? Math.round(((totalNormal + totalExtra) / totalExpected) * 100)
       : 100;
 
+    const total = formattedRecords.length;
+    let paginatedRecords = formattedRecords;
+    let page = 1;
+    let limit = total;
+    let totalPages = 1;
+
+    if (pageParam) {
+      page = parseInt(pageParam, 10) || 1;
+      limit = parseInt(limitParam || '15', 10) || 15;
+      const skip = (page - 1) * limit;
+      paginatedRecords = formattedRecords.slice(skip, skip + limit);
+      totalPages = Math.ceil(total / limit);
+    }
+
     return apiResponse({
-      records: formattedRecords,
+      records: paginatedRecords,
+      total,
+      page,
+      limit,
+      totalPages,
       kpis: {
         totalExpected: parseFloat((totalExpected / 60).toFixed(1)),
         totalWorked: parseFloat((totalWorked / 60).toFixed(1)),

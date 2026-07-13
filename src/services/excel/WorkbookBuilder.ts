@@ -30,7 +30,7 @@ export class WorkbookBuilder {
     // 1. Brand Header
     sheet.mergeCells('A1:C1');
     const brandCell = sheet.getCell('A1');
-    brandCell.value = '❄️ IsLuny Org - IsLuny Works';
+    brandCell.value = 'IsLuny Org - IsLuny Works';
     brandCell.font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
     brandCell.fill = {
       type: 'pattern',
@@ -140,7 +140,7 @@ export class WorkbookBuilder {
     // 1. Brand Header
     sheet.mergeCells(`A1:${lastColLetter}1`);
     const brandCell = sheet.getCell('A1');
-    brandCell.value = '❄️ IsLuny Org - IsLuny Works';
+    brandCell.value = 'IsLuny Org - IsLuny Works';
     brandCell.font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
     brandCell.fill = {
       type: 'pattern',
