@@ -4,11 +4,11 @@
 set -e
 
 # 1. Load environment variables from .env file if it exists
-if [ -f .env ]; then
-  echo "Loading environment variables from .env file..."
-  # Export non-comment lines
-  export $(grep -v '^#' .env | xargs)
-fi
+# if [ -f .env ]; then
+#   echo "Loading environment variables from .env file..."
+#   # Export non-comment lines
+#   export $(grep -v '^#' .env | xargs)
+# fi
 
 # 2. Validate mandatory environment variables
 echo "Validating environment variables..."
@@ -35,6 +35,7 @@ if [ "$MISSING_VAR" -eq 1 ]; then
 fi
 
 echo "✅ Validação concluída com sucesso."
+echo "DATABASE_URL: $DATABASE_URL"
 
 # 3. Run database migrations with error handling
 echo "Running database migrations..."
@@ -52,4 +53,10 @@ fi
 
 # 5. Start the Next.js standalone application
 echo "Starting the Next.js application..."
-exec node server.js
+if [ -f .env ]; then
+  echo "Running node with native --env-file=.env flag..."
+  exec node --env-file=.env server.js
+else
+  echo "Running node using process environment variables..."
+  exec node server.js
+fi
