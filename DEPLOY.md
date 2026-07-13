@@ -68,13 +68,30 @@ cd /opt/isluny-works
 
 ## 5. Configuração das Variáveis de Ambiente
 
-Crie o arquivo `.env` de produção a partir do modelo `.env.example`:
+O IsLuny Works em produção **não depende de arquivos `.env`**. Em vez disso, todas as variáveis de ambiente devem ser exportadas diretamente no shell do sistema operacional do host antes de executar o Docker Compose. Isso garante total conformidade com as diretivas de segurança (Twelve-Factor App) e simplifica pipelines de CI/CD.
+
+### Como Definir as Variáveis no Ambiente do Servidor
+Antes de subir os containers, defina as variáveis obrigatórias exportando-as no seu terminal:
 
 ```bash
-cp .env.example .env
+# Definir as credenciais do banco
+export POSTGRES_USER="isluny_admin"
+export POSTGRES_PASSWORD="Ua9#dK8!2qPz"
+export POSTGRES_DB="isluny_works_prod"
+
+# Definir a string de conexão (caso queira usar um banco externo ou customizado)
+export DATABASE_URL="postgresql://isluny_admin:Ua9#dK8!2qPz@postgres:5432/isluny_works_prod?schema=public"
+
+# Definir parâmetros do Auth.js
+export NEXTAUTH_URL="https://works.isluny.org"
+export NEXTAUTH_SECRET="8e77a2ef6ba3a76387f5be24867140f7d5402cbb346..."
+
+# Definir modo de execução
+export NODE_ENV="production"
 ```
 
-Edite o arquivo `.env` (`nano .env` ou `vim .env`) e configure as variáveis detalhadas abaixo:
+> [!TIP]
+> Para tornar essas variáveis persistentes entre reinicializações do terminal no servidor, você pode adicioná-las ao arquivo `/etc/environment` do Linux ou usar ferramentas de provisionamento de infraestrutura (como Ansible ou Terraform) que injetam segredos no pipeline.
 
 | Variável | Descrição | Obrigatória? | Exemplo de Uso |
 | :--- | :--- | :---: | :--- |
@@ -87,18 +104,17 @@ Edite o arquivo `.env` (`nano .env` ou `vim .env`) e configure as variáveis det
 | `NEXTAUTH_SECRET` | Chave secreta de criptografia para assinar os tokens de sessão (JWT). | Sim | `8e77a2ef6ba3a76387f5be24867140f7d5402cbb346...` |
 | `PORT` | Porta interna na qual o servidor Next.js escutará (padrão: `3000`). | Não | `3000` |
 
-### Estratégia de Carregamento e Validação
+### Validação na Inicialização
 Para garantir a estabilidade e evitar comportamentos inconsistentes:
-1. **Carregamento Automático**: Durante a inicialização do container, o script `entrypoint.sh` verifica a existência do arquivo `.env` no diretório de execução e carrega/exporta automaticamente todas as variáveis nele definidas para o shell.
-2. **Validação de Variáveis Obrigatórias**: O container realiza uma verificação prévia obrigatória. Se as variáveis `DATABASE_URL`, `NEXTAUTH_SECRET` ou `NEXTAUTH_URL` não estiverem presentes no ambiente (seja via arquivo `.env` ou via host do Docker), o container interrompe a inicialização exibindo mensagens de erro descritivas no console:
+1. **Validação do Container**: O container realiza uma verificação prévia obrigatória. Se as variáveis `DATABASE_URL`, `NEXTAUTH_SECRET` ou `NEXTAUTH_URL` não estiverem presentes no ambiente herdado pelo Docker, o container interrompe a inicialização exibindo mensagens de erro descritivas no console:
    ```text
    ❌ ERROR: A variável de ambiente DATABASE_URL está ausente.
-   ❌ Falha na inicialização: Configure as variáveis obrigatórias no arquivo .env ou no ambiente do container.
+   ❌ Falha na inicialização: Configure as variáveis obrigatórias no ambiente do container.
    ```
-3. **Independência do Build**: O IsLuny Works utiliza o modo `standalone` do Next.js. Nenhum segredo ou credencial de banco de dados é embutido no código compilado durante a etapa de build (`next build`), permitindo que a mesma imagem Docker gerada seja executada em diferentes ambientes mudando apenas o runtime `.env`.
+2. **Independência do Build**: The IsLuny Works utiliza o modo `standalone` do Next.js. Nenhum segredo ou credencial de banco de dados é embutido no código compilado durante a etapa de build (`next build`), permitindo que a mesma imagem Docker gerada seja executada em diferentes ambientes mudando apenas o runtime.
 
 > [!IMPORTANT]
-> Nunca compartilhe ou envie o arquivo `.env` para repositórios públicos do Git. Armazene as credenciais em um gerenciador de segredos seguro. Para gerar um `NEXTAUTH_SECRET` robusto, execute o seguinte comando:
+> Nunca salve ou comite segredos no repositório do Git. Para gerar um `NEXTAUTH_SECRET` robusto, execute o seguinte comando:
 > ```bash
 > openssl rand -base64 32
 > ```
@@ -438,7 +454,7 @@ Integre as seguintes soluções para acompanhar a saúde e o uso do IsLuny Works
 
 ```mermaid
 flowchart TD
-  A["Clonar o Repositório Git"] --> B["Criar e Configurar o .env"]
+  A["Clonar o Repositório Git"] --> B["Exportar Variáveis no Ambiente"]
   B --> C["Ajustar Firewall e Proxy Reverso"]
   C --> D["Executar docker-compose up -d --build"]
   D --> E["Database Health Check (pg_isready)"]
@@ -457,7 +473,7 @@ flowchart TD
 
 Valide todos os itens abaixo antes de liberar a plataforma para os colaboradores da **IsLuny Org**:
 
-- [ ] Arquivo `.env` configurado corretamente no servidor.
+- [ ] Variáveis de ambiente exportadas corretamente no host/servidor.
 - [ ] Variável `NODE_ENV` definida como `production`.
 - [ ] Chave `NEXTAUTH_SECRET` gerada usando um gerador seguro.
 - [ ] Variável `NEXTAUTH_URL` aponta para o domínio HTTPS definitivo.
