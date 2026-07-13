@@ -87,6 +87,16 @@ Edite o arquivo `.env` (`nano .env` ou `vim .env`) e configure as variáveis det
 | `NEXTAUTH_SECRET` | Chave secreta de criptografia para assinar os tokens de sessão (JWT). | Sim | `8e77a2ef6ba3a76387f5be24867140f7d5402cbb346...` |
 | `PORT` | Porta interna na qual o servidor Next.js escutará (padrão: `3000`). | Não | `3000` |
 
+### Estratégia de Carregamento e Validação
+Para garantir a estabilidade e evitar comportamentos inconsistentes:
+1. **Carregamento Automático**: Durante a inicialização do container, o script `entrypoint.sh` verifica a existência do arquivo `.env` no diretório de execução e carrega/exporta automaticamente todas as variáveis nele definidas para o shell.
+2. **Validação de Variáveis Obrigatórias**: O container realiza uma verificação prévia obrigatória. Se as variáveis `DATABASE_URL`, `NEXTAUTH_SECRET` ou `NEXTAUTH_URL` não estiverem presentes no ambiente (seja via arquivo `.env` ou via host do Docker), o container interrompe a inicialização exibindo mensagens de erro descritivas no console:
+   ```text
+   ❌ ERROR: A variável de ambiente DATABASE_URL está ausente.
+   ❌ Falha na inicialização: Configure as variáveis obrigatórias no arquivo .env ou no ambiente do container.
+   ```
+3. **Independência do Build**: O IsLuny Works utiliza o modo `standalone` do Next.js. Nenhum segredo ou credencial de banco de dados é embutido no código compilado durante a etapa de build (`next build`), permitindo que a mesma imagem Docker gerada seja executada em diferentes ambientes mudando apenas o runtime `.env`.
+
 > [!IMPORTANT]
 > Nunca compartilhe ou envie o arquivo `.env` para repositórios públicos do Git. Armazene as credenciais em um gerenciador de segredos seguro. Para gerar um `NEXTAUTH_SECRET` robusto, execute o seguinte comando:
 > ```bash
